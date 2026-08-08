@@ -10,6 +10,7 @@ import com.abess.enspy.ui.DocumentsFragment
 import com.abess.enspy.ui.ForumFragment
 import com.abess.enspy.ui.CalendarFragment
 import com.abess.enspy.ui.ProfileFragment
+import com.abess.enspy.ui.AuthFragment
 
 class MainActivity : AppCompatActivity() {
     lateinit var store: SecureStore
@@ -41,9 +42,28 @@ class MainActivity : AppCompatActivity() {
         if (savedInstanceState == null) openFragment(HomeFragment())
     }
 
-    private fun openFragment(fragment: Fragment) {
+    fun openFragment(fragment: Fragment) {
         supportFragmentManager.beginTransaction()
             .replace(R.id.fragment_container, fragment)
+            .addToBackStack(null)
             .commit()
+    }
+
+    /**
+     * If the user is authenticated the [action] will run immediately.
+     * Otherwise we open the AuthFragment so the user can login/register first.
+     */
+    fun requireAuthentication(action: () -> Unit) {
+        val token = store.get("token")
+        if (token.isNullOrBlank()) {
+            // open auth screen
+            openFragment(AuthFragment())
+        } else {
+            action()
+        }
+    }
+
+    fun openAuth() {
+        openFragment(AuthFragment())
     }
 }
