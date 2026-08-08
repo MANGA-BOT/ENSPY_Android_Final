@@ -16,6 +16,9 @@ class MainActivity : AppCompatActivity() {
     lateinit var store: SecureStore
     lateinit var api: ApiClient
 
+    // Pending action stored when we require authentication — executed after successful login/register
+    var pendingAction: (() -> Unit)? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
@@ -52,11 +55,13 @@ class MainActivity : AppCompatActivity() {
     /**
      * If the user is authenticated the [action] will run immediately.
      * Otherwise we open the AuthFragment so the user can login/register first.
+     * The action will be executed automatically after successful authentication.
      */
     fun requireAuthentication(action: () -> Unit) {
         val token = store.get("token")
         if (token.isNullOrBlank()) {
-            // open auth screen
+            // save action and open auth screen
+            pendingAction = action
             openFragment(AuthFragment())
         } else {
             action()
@@ -65,5 +70,10 @@ class MainActivity : AppCompatActivity() {
 
     fun openAuth() {
         openFragment(AuthFragment())
+    }
+
+    fun runPendingAction() {
+        pendingAction?.invoke()
+        pendingAction = null
     }
 }

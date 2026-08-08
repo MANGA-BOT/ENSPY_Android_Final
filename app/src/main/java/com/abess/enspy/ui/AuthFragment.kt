@@ -11,12 +11,13 @@ import com.abess.enspy.MainActivity
 import com.abess.enspy.R
 import com.abess.enspy.SecureStore
 import com.google.android.material.button.MaterialButton
+import org.json.JSONArray
 import org.json.JSONObject
 
 class AuthFragment : Fragment(R.layout.fragment_auth) {
 
-    // sample filieres -- update with real values from API if available
-    private val filieres = listOf(
+    // filieres will be loaded from API when possible; fallback to these values
+    private var filieres = mutableListOf(
         1 to "INFO",
         2 to "MSP",
         3 to "GC",
@@ -39,9 +40,31 @@ class AuthFragment : Fragment(R.layout.fragment_auth) {
         val api: ApiClient = activity.api
         val store: SecureStore = activity.store
 
-        // adapters
+        // adapters (initial)
         filiere.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, filieres.map { it.second }))
         level.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, levels))
+
+        // try to fetch filieres from API to keep list up-to-date
+        api.get("/api/filieres") { status, raw ->
+            activity.runOnUiThread {
+                if (status in 200..299) {
+                    val items = runCatching { JSONArray(raw) }.getOrNull() ?: runCatching { JSONObject(raw).optJSONArray("data") }.getOrNull()
+                    if (items != null) {
+                        val loaded = mutableListOf<Pair<Int, String>>()
+                        for (i in 0 until items.length()) {
+                            val obj = items.optJSONObject(i) ?: continue
+                            val id = obj.optInt("id", -1)
+                            val name = obj.optString("name", obj.optString("label", ""))
+                            if (id != -1 && name.isNotBlank()) loaded.add(id to name)
+                        }
+                        if (loaded.isNotEmpty()) {
+                            filieres = loaded
+                            filiere.setAdapter(ArrayAdapter(requireContext(), android.R.layout.simple_dropdown_item_1line, filieres.map { it.second }))
+                        }
+                    }
+                }
+            }
+        }
 
         var registerMode = false
         fun updateUiForMode() {
@@ -82,17 +105,19 @@ class AuthFragment : Fragment(R.layout.fragment_auth) {
                             store.put("token", token)
                             val user = resp.optJSONObject("user") ?: resp.optJSONObject("student")
                             if (user != null) store.put("student", user.toString())
+                            // run pending action if any
+                            activity.runPendingAction()
                             // return to home
                             activity.openFragment(HomeFragment())
                         } else {
-                            // show error
+                            // TODO: show error to user
                         }
                     }
                 }
             } else {
                 // register - need filiere id and level id
                 val filiereName = filiere.text.toString()
-                val filiereId = filieres.find { it.second == filiereName }?.first ?: 5
+                val filiereId = filieres.find { it.second == filiereName }?.first ?: filieres.first().first
                 val levelId = level.text.toString().toIntOrNull() ?: 1
                 val body = JSONObject().apply {
                     put("email", em)
@@ -110,9 +135,11 @@ class AuthFragment : Fragment(R.layout.fragment_auth) {
                             store.put("token", token)
                             val user = resp.optJSONObject("user") ?: resp.optJSONObject("student")
                             if (user != null) store.put("student", user.toString())
+                            // run pending action if any
+                            activity.runPendingAction()
                             activity.openFragment(HomeFragment())
                         } else {
-                            // show error
+                            // TODO: show error to user
                         }
                     }
                 }
