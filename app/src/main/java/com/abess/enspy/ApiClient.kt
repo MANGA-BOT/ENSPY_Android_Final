@@ -27,31 +27,44 @@ class ApiClient(private val store: SecureStore) {
         Thread {
             var connection: HttpURLConnection? = null
             val result = runCatching {
-                connection = URL(url(path)).openConnection() as HttpURLConnection
-                connection!!.requestMethod = method
-                connection!!.connectTimeout = 12_000
-                connection!!.readTimeout = 20_000
-                connection!!.setRequestProperty("Accept", "application/json")
-                store.get("token")?.let { connection!!.setRequestProperty("Authorization", "Bearer $it") }
-                if (body != null) {
-                    connection!!.doOutput = true
-                    connection!!.setRequestProperty("Content-Type", "application/json")
-                    connection!!.outputStream.use { it.write(body.toString().toByteArray()) }
+                try {
+                    connection = URL(url(path)).openConnection() as HttpURLConnection
+                    connection.requestMethod = method
+                    connection.connectTimeout = 12_000
+                    connection.readTimeout = 20_000
+                    connection.setRequestProperty("Accept", "application/json")
+                    store.get("token")?.let { connection.setRequestProperty("Authorization", "Bearer $it") }
+
+                    if (body != null) {
+                        connection.doOutput = true
+                        connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
+                        connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+                    }
+
+                    val status = connection.responseCode
+                    val stream = if (status in 200..399) connection.inputStream else connection.errorStream
+                    val text = stream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty()
+                    status to text
+                } catch (e: Exception) {
+                    // propagate readable message
+                    0 to (e.message ?: "Connexion impossible")
                 }
-                val status = connection!!.responseCode
-                val stream = if (status in 200..399) connection!!.inputStream else connection!!.errorStream
-                val text = stream?.let { BufferedReader(InputStreamReader(it)).use { reader -> reader.readText() } }.orEmpty()
-                status to text
-            }.getOrElse { 0 to (it.message ?: "Connexion impossible") }
-            connection?.disconnect()
+            }.getOrElse {
+                0 to (it.message ?: "Connexion impossible")
+            }
+
+            try {
+                connection?.disconnect()
+            } catch (_: Exception) { /* ignore */ }
+
             main.post { callback(result.first, result.second) }
         }.start()
     }
 
     fun documentsQuery(search: String, type: String, callback: (Int, String) -> Unit) {
         val params = mutableListOf<String>()
-        if (search.isNotBlank()) params += "search=${URLEncoder.encode(search, "UTF-8")}"
-        if (type.isNotBlank()) params += "docType=${URLEncoder.encode(type, "UTF-8")}"
+        if (search.isNotBlank()) params += "search=${URLEncoder.encode(search, "UTF-8") }"
+        if (type.isNotBlank()) params += "docType=${URLEncoder.encode(type, "UTF-8") }"
         get("/api/documents${if (params.isEmpty()) "" else "?" + params.joinToString("&")}", callback)
     }
 }
