@@ -66,23 +66,48 @@ class SecureStore(private val context: Context) {
     fun downloadAndEncrypt(urlString: String, documentId: Int, callback: (Boolean, String?) -> Unit) {
         Thread {
             val output = securePdfFile(documentId)
+            var temp: File? = null
             val result = runCatching {
                 val url = URL(urlString)
                 val connection = url.openConnection() as HttpURLConnection
-                connection.connectTimeout = 15_000
-                connection.readTimeout = 30_000
-                connection.setRequestProperty("Authorization", "Bearer ${get("token").orEmpty()}")
-                if (connection.responseCode !in 200..299) error("Téléchargement refusé (${connection.responseCode})")
-                val bytes = connection.inputStream.use { it.readBytes() }
-                val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-                    init(Cipher.ENCRYPT_MODE, key())
+                try {
+                    connection.connectTimeout = 15_000
+                    connection.readTimeout = 30_000
+                    connection.setRequestProperty("Authorization", "Bearer ${get("token").orEmpty()}")
+                    val code = connection.responseCode
+                    if (code !in 200..299) error("Téléchargement refusé ($code)")
+
+                    // write to a temp file first to avoid partial final files
+                    val dir = output.parentFile?.apply { mkdirs() } ?: context.filesDir
+                    temp = File.createTempFile("enspy_dl_", ".tmp", dir)
+
+                    val bytes = connection.inputStream.use { it.readBytes() }
+
+                    val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+                        init(Cipher.ENCRYPT_MODE, key())
+                    }
+                    val packed = cipher.iv + cipher.doFinal(bytes)
+                    FileOutputStream(temp!!).use { it.write(packed) }
+
+                    // move temp to final atomically
+                    if (output.exists()) output.delete()
+                    if (!temp!!.renameTo(output)) {
+                        // fallback: copy
+                        FileOutputStream(output).use { out -> FileInputStream(temp!!).use { it.copyTo(out) } }
+                        temp!!.delete()
+                    }
+
+                    output.absolutePath
+                } finally {
+                    try { connection.disconnect() } catch (_: Exception) {}
                 }
-                val packed = cipher.iv + cipher.doFinal(bytes)
-                FileOutputStream(output).use { it.write(packed) }
-                output.absolutePath
             }
+
+            // ensure temp cleanup on failure
+            if (result.isFailure) temp?.delete()
+
             android.os.Handler(android.os.Looper.getMainLooper()).post {
-                callback(result.isSuccess, result.getOrNull())
+                if (result.isSuccess) callback(true, result.getOrNull()) else callback(false, null)
             }
         }.start()
     }
@@ -90,10 +115,16 @@ class SecureStore(private val context: Context) {
     fun decryptToCache(encrypted: File, documentId: Int): File {
         val packed = FileInputStream(encrypted).use { it.readBytes() }
         val plain = File.createTempFile("enspy_view_$documentId", ".pdf", context.cacheDir)
-        val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
-            init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+        try {
+            val cipher = Cipher.getInstance("AES/GCM/NoPadding").apply {
+                init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, packed.copyOfRange(0, 12)))
+            }
+            FileOutputStream(plain).use { it.write(cipher.doFinal(packed.copyOfRange(12, packed.size))) }
+            return plain
+        } catch (e: Exception) {
+            // cleanup on failure
+            try { plain.delete() } catch (_: Exception) {}
+            throw e
         }
-        FileOutputStream(plain).use { it.write(cipher.doFinal(packed.copyOfRange(12, packed.size))) }
-        return plain
     }
 }
