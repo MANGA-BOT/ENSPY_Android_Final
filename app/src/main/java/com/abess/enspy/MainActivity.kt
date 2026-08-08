@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
         val logo = ImageView(this).apply {
             setImageResource(R.drawable.enspy_logo)
             scaleType = ImageView.ScaleType.CENTER_INSIDE
+            contentDescription = getString(R.string.logo_content_description)
             background = rounded(Color.WHITE, dp(18), R.color.enspy_line)
             elevation = dp(4).toFloat()
             layoutParams = LinearLayout.LayoutParams(dp(124), dp(124)).apply {
@@ -95,8 +96,8 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, dp(6), 0, dp(18))
         })
         val name = authField("Nom complet", false)
-        val email = authField("Adresse e-mail", false)
-        val password = authField("Mot de passe", true)
+        val email = authField(getString(R.string.login_email_hint), false)
+        val password = authField(getString(R.string.login_password_hint), true)
         val level = authField("Niveau (1 ou 2)", false)
         val filiere = authField("Filière (INFO, MSP, ...)", false)
         card.addView(email)
@@ -107,7 +108,7 @@ class MainActivity : AppCompatActivity() {
         name.visibility = View.GONE
         level.visibility = View.GONE
         filiere.visibility = View.GONE
-        val action = button("Se connecter", true)
+        val action = button(getString(R.string.action_login), true)
         card.addView(action, LinearLayout.LayoutParams(-1, dp(54)).apply { topMargin = dp(8) })
         val toggle = button("Créer un compte étudiant", false)
         card.addView(toggle, LinearLayout.LayoutParams(-1, dp(52)).apply { topMargin = dp(8) })
@@ -121,7 +122,7 @@ class MainActivity : AppCompatActivity() {
         whatsapp.setOnClickListener { contactDeveloper() }
         fun updateRegister(register: Boolean) {
             mode.text = if (register) "Créer mon compte" else "Connexion"
-            action.text = if (register) "S'inscrire" else "Se connecter"
+            action.text = if (register) getString(R.string.action_register) else getString(R.string.action_login)
             toggle.text = if (register) "J'ai déjà un compte" else "Créer un compte étudiant"
             name.visibility = if (register) View.VISIBLE else View.GONE
             level.visibility = if (register) View.VISIBLE else View.GONE
@@ -132,6 +133,10 @@ class MainActivity : AppCompatActivity() {
         action.setOnClickListener {
             if (email.text.toString().trim().isEmpty() || password.text.toString().isEmpty()) {
                 toast("Renseigne ton e-mail et ton mot de passe."); return@setOnClickListener
+            }
+            // basic email validation
+            if (!android.util.Patterns.EMAIL_ADDRESS.matcher(email.text.toString().trim()).matches()) {
+                toast("Adresse e-mail invalide."); return@setOnClickListener
             }
             action.isEnabled = false
             val body = JSONObject().apply {
@@ -144,18 +149,21 @@ class MainActivity : AppCompatActivity() {
                 }
             }
             api.post(if (registerMode) "/api/auth/register" else "/api/auth/login", body) { status, raw ->
-                action.isEnabled = true
-                val response = parseResponse(raw)
-                val token = response.optString("token")
-                if (status in 200..299 && token.isNotBlank()) {
-                    store.put("token", token)
-                    val user = response.optJSONObject("user") ?: response.optJSONObject("student")
-                    if (user != null) {
-                        student = user.asStudent()
-                        store.put("student", user.toString())
-                    }
-                    showApp()
-                } else toast(response.optString("message", if (raw.isBlank()) "Connexion impossible." else raw.take(160)))
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    action.isEnabled = true
+                    val response = parseResponse(raw)
+                    val token = response.optString("token")
+                    if (status in 200..299 && token.isNotBlank()) {
+                        store.put("token", token)
+                        val user = response.optJSONObject("user") ?: response.optJSONObject("student")
+                        if (user != null) {
+                            student = user.asStudent()
+                            store.put("student", user.toString())
+                        }
+                        showApp()
+                    } else toast(response.optString("message", if (raw.isBlank()) getString(R.string.toast_connection_failed) else raw.take(160)))
+                }
             }
         }
         setContentView(scroll)
@@ -234,6 +242,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(recent)
         api.get("/api/documents/recent") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (status in 200..299) {
                     val list = arrayFrom(raw).objects().take(4)
                     if (list.isEmpty()) recent.addView(empty("Aucun document récent."))
@@ -246,6 +255,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(events)
         api.get("/api/events/upcoming") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (status in 200..299) arrayFrom(raw).objects().take(3).forEach { events.addView(eventCard(it.asCalendarEvent())) }
                 if (events.childCount == 0) events.addView(empty("Aucun événement à venir."))
             }
@@ -304,6 +314,7 @@ class MainActivity : AppCompatActivity() {
         list.addView(text("Chargement…", 14, muted).apply { setPadding(0, 18, 0, 18) })
         api.documentsQuery(search, type) { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 list.removeAllViews()
                 if (status in 200..299) {
                     val items = arrayFrom(raw).objects()
@@ -324,6 +335,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(list)
         api.get("/api/forum/posts?sort=recent") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (status in 200..299) {
                     val posts = arrayFrom(raw).objects()
                     posts.forEach { list.addView(postCard(it.asForumPost())) }
@@ -340,6 +352,7 @@ class MainActivity : AppCompatActivity() {
         content.addView(list)
         api.get("/api/events") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 if (status in 200..299) arrayFrom(raw).objects().forEach { list.addView(eventCard(it.asCalendarEvent())) }
                 if (list.childCount == 0) list.addView(empty("Aucun événement enregistré."))
             }
@@ -397,20 +410,31 @@ class MainActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this).setView(panel).create()
         read.setOnClickListener {
             dialog.dismiss()
+            // validate document id and fileUrl
+            if (document.id == 0 && document.fileUrl.isBlank()) {
+                toast("Aucun fichier n'est associé à ce document.")
+                return@setOnClickListener
+            }
             val local = store.securePdfFile(document.id)
             if (local.exists()) {
                 startActivity(Intent(this, PdfViewerActivity::class.java).putExtra("path", local.absolutePath).putExtra("title", document.title))
             } else if (document.fileUrl.isNotBlank()) {
                 toast("Téléchargement sécurisé en cours…")
                 store.downloadAndEncrypt(api.url(document.fileUrl), document.id) { ok, path ->
-                    if (ok && path != null) startActivity(Intent(this, PdfViewerActivity::class.java).putExtra("path", path).putExtra("title", document.title))
-                    else toast("Le document n'a pas pu être téléchargé.")
+                    runOnUiThread {
+                        if (isFinishing || isDestroyed) return@runOnUiThread
+                        if (ok && path != null) startActivity(Intent(this, PdfViewerActivity::class.java).putExtra("path", path).putExtra("title", document.title))
+                        else toast("Le document n'a pas pu être téléchargé.")
+                    }
                 }
             } else toast("Aucun fichier n'est associé à ce document.")
         }
         favorite.setOnClickListener {
             api.post("/api/favorites", JSONObject().put("documentId", document.id)) { status, _ ->
-                if (status in 200..299) toast("Ajouté aux favoris.") else toast("Connexion requise pour les favoris.")
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (status in 200..299) toast("Ajouté aux favoris.") else toast("Connexion requise pour les favoris.")
+                }
             }
         }
         dialog.show()
@@ -447,7 +471,10 @@ class MainActivity : AppCompatActivity() {
 
     private fun votePost(postId: Int, value: Int) {
         api.post("/api/forum/posts/$postId/vote", JSONObject().put("value", value)) { status, _ ->
-            if (status in 200..299) toast("Vote enregistré.") else toast("Connecte-toi pour voter.")
+            runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
+                if (status in 200..299) toast("Vote enregistré.") else toast("Connecte-toi pour voter.")
+            }
         }
     }
 
@@ -464,7 +491,10 @@ class MainActivity : AppCompatActivity() {
         send.setOnClickListener {
             if (answer.text.isBlank()) return@setOnClickListener
             api.post("/api/forum/posts/${post.id}/answers", JSONObject().put("content", answer.text.toString())) { status, _ ->
-                if (status in 200..299) { dialog.dismiss(); toast("Réponse publiée.") } else toast("Impossible de publier la réponse.")
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (status in 200..299) { dialog.dismiss(); toast("Réponse publiée.") } else toast("Impossible de publier la réponse.")
+                }
             }
         }
         dialog.show()
@@ -480,7 +510,10 @@ class MainActivity : AppCompatActivity() {
         val dialog = AlertDialog.Builder(this).setTitle("Nouvelle question").setView(panel).create()
         send.setOnClickListener {
             api.post("/api/forum/posts", JSONObject().put("title", titleInput.text.toString()).put("content", body.text.toString())) { status, _ ->
-                if (status in 200..299) { dialog.dismiss(); toast("Question publiée."); showTab(2) } else toast("Connecte-toi pour publier.")
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (status in 200..299) { dialog.dismiss(); toast("Question publiée."); showTab(2) } else toast("Connecte-toi pour publier.")
+                }
             }
         }
         dialog.show()
@@ -499,8 +532,11 @@ class MainActivity : AppCompatActivity() {
             api.post("/api/contributions", JSONObject().put("title", titleInput.text.toString())
                 .put("fileUrl", url.text.toString()).put("description", description.text.toString())
                 .put("docType", "cours")) { status, _ ->
-                if (status in 200..299) { dialog.dismiss(); toast("Merci, ta contribution est en attente de validation.") }
-                else toast("Vérifie les informations saisies.")
+                runOnUiThread {
+                    if (isFinishing || isDestroyed) return@runOnUiThread
+                    if (status in 200..299) { dialog.dismiss(); toast("Merci, ta contribution est en attente de validation.") }
+                    else toast("Vérifie les informations saisies.")
+                }
             }
         }
         dialog.show()
@@ -509,17 +545,17 @@ class MainActivity : AppCompatActivity() {
     private fun averageDialog() {
         val panel = LinearLayout(this).vertical().apply { setPadding(22) }
         val values = field("Notes séparées par des virgules (ex: 12, 14, 9)", false)
-        val coefficients = field("Coefficients séparés par des virgules (ex: 2, 1, 3)", false)
-        panel.addView(values); panel.addView(coefficients)
+        val coefs = field("Coefficients séparés par des virgules (ex: 2, 1, 3)", false)
+        panel.addView(values); panel.addView(coefs)
         val result = text("Résultat : —", 18, orange, true).apply { setPadding(0, 16, 0, 0) }
         panel.addView(result)
         val calculate = button("Calculer ma moyenne", true)
         panel.addView(calculate, LinearLayout.LayoutParams(-1, 52).apply { topMargin = 14 })
         calculate.setOnClickListener {
             val notes = values.text.toString().split(",").mapNotNull { it.trim().toDoubleOrNull() }
-            val coefs = coefficients.text.toString().split(",").mapNotNull { it.trim().toDoubleOrNull() }
-            if (notes.isEmpty() || notes.size != coefs.size || coefs.sum() == 0.0) result.text = "Vérifie le nombre de notes et de coefficients."
-            else result.text = "Résultat : %.2f / 20".format(notes.zip(coefs).sumOf { it.first * it.second } / coefs.sum())
+            val coefficients = coefs.text.toString().split(",").mapNotNull { it.trim().toDoubleOrNull() }
+            if (notes.isEmpty() || notes.size != coefficients.size || coefficients.sum() == 0.0) result.text = "Vérifie le nombre de notes et de coefficients."
+            else result.text = "Résultat : %.2f / 20".format(notes.zip(coefficients).sumOf { it.first * it.second } / coefficients.sum())
         }
         AlertDialog.Builder(this).setTitle("Calculatrice de moyenne").setView(panel).setPositiveButton("Fermer", null).show()
     }
@@ -527,6 +563,7 @@ class MainActivity : AppCompatActivity() {
     private fun favorites() {
         api.get("/api/favorites") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 val panel = LinearLayout(this).vertical().apply { setPadding(22) }
                 if (status in 200..299) arrayFrom(raw).objects().forEach { panel.addView(documentCard(it.asDocument())) }
                 if (panel.childCount == 0) panel.addView(empty("Aucun favori pour le moment."))
@@ -538,13 +575,14 @@ class MainActivity : AppCompatActivity() {
     private fun showNotifications() {
         api.get("/api/notifications") { status, raw ->
             runOnUiThread {
+                if (isFinishing || isDestroyed) return@runOnUiThread
                 val panel = LinearLayout(this).vertical().apply { setPadding(22) }
                 if (status in 200..299) arrayFrom(raw).objects().forEach {
                     panel.addView(text(it.optString("title", "Notification"), 16, ink, true))
                     panel.addView(text(it.optString("message", it.optString("body")), 14, muted).apply { setPadding(0, 4, 0, 12) })
                 }
                 if (panel.childCount == 0) panel.addView(empty("Tu n'as pas de nouvelle notification."))
-                AlertDialog.Builder(this).setTitle("Notifications").setView(ScrollView(this).apply { addView(panel) }).setPositiveButton("Fermer", null).show()
+                AlertDialog.Builder(this).setView(ScrollView(this).apply { addView(panel) }).setPositiveButton("Fermer", null).show()
                 if (status in 200..299) api.patch("/api/notifications/read-all", JSONObject()) { _, _ -> }
             }
         }
@@ -691,5 +729,5 @@ class MainActivity : AppCompatActivity() {
         return obj.dataArray() ?: runCatching { JSONArray(raw) }.getOrDefault(JSONArray())
     }
 
-    private fun toast(message: String) = runOnUiThread { Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
+    private fun toast(message: String) = runOnUiThread { if (isFinishing || isDestroyed) return@runOnUiThread; Toast.makeText(this, message, Toast.LENGTH_SHORT).show() }
 }
