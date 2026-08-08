@@ -7,6 +7,7 @@ android {
     namespace = "com.abess.enspy"
     buildFeatures {
         buildConfig = true
+        viewBinding = true
     }
     compileSdk {
         version = release(36)
@@ -49,6 +50,7 @@ dependencies {
     implementation(libs.androidx.constraintlayout)
     implementation("androidx.recyclerview:recyclerview:1.4.0")
     implementation("com.google.android.material:material:1.9.0")
+    implementation("androidx.fragment:fragment-ktx:1.5.7")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
