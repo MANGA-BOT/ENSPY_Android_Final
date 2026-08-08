@@ -1,3 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">ENSPY</string>
+    <string name="logo_content_description">Logo ENSPY</string>
+    <string name="login_email_hint">Adresse e-mail</string>
+    <string name="login_password_hint">Mot de passe</string>
+    <string name="action_login">Se connecter</string>
+    <string name="action_register">S'inscrire</string>
+    <string name="toast_connection_failed">Connexion impossible.</string>
 </resources>
