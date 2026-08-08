@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Certificates for Google Play Services fonts provider -->
+    <array name="com_google_android_gms_fonts_certs">
+        <item>@array/com_google_android_gms_fonts_certs_prod</item>
+    </array>
+
+    <array name="com_google_android_gms_fonts_certs_prod">
+        <item>
+            MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAtv0xG3f6T3V5a3V7vK6P
+            1n3q9mOyqVw0K6N5sK0u6bqYrC4xHh5Q+YF1O1k6W8q3mZ6l1K2k6QjN1+X2e1Tq
+            9V3z3V0k3g6a9vZ0sQv+8V6Qk3l5N7kq4Yw==
+        </item>
+    </array>
+</resources>
